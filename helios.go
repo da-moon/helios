@@ -15,13 +15,13 @@ import (
 // Configuration :
 type Configuration struct {
 	RequestHeaders          []string
-	Secret                  func(string) []byte
+	Secret                  func(string) string
 	ExpirationTime          time.Duration
 	ExpirationTimeTolerance time.Duration
 }
 
 // NewConfiguration :
-func NewConfiguration(_requestHeaders []string, _secret func(string) []byte, _expirationTime time.Duration, _expirationTimeTolerance time.Duration) *Configuration {
+func NewConfiguration(_requestHeaders []string, _secret func(string) string, _expirationTime time.Duration, _expirationTimeTolerance time.Duration) *Configuration {
 	return &Configuration{
 		RequestHeaders:          _requestHeaders,
 		Secret:                  _secret,
@@ -53,8 +53,7 @@ func AuthorisationHandler(configuration *Configuration) func(http.ResponseWriter
 		if err != nil {
 			log.Panic(err)
 		}
-		stringToSign := (r.Method + "\n" + r.Host +
-			"\n" + r.URL.RequestURI() + "\n" + input.TimestampString + "\n")
+		stringToSign := (r.Method + "\n" + r.Host + "\n" + r.URL.RequestURI() + "\n" + input.TimestampString + "\n")
 		sort.Strings(configuration.RequestHeaders)
 		for _, header := range configuration.RequestHeaders {
 			currentHeader := r.Header.Get(header)
@@ -63,14 +62,11 @@ func AuthorisationHandler(configuration *Configuration) func(http.ResponseWriter
 			}
 			stringToSign = stringToSign + currentHeader + "\n"
 		}
-		if err != nil {
-			log.Panic(err)
-		}
 		secretKey := configuration.Secret(input.AccessKey)
 		if len(secretKey) == 0 {
 			log.Panicf("Request API key is invalid")
 		}
-		hash := hmac.New(sha256.New, (secretKey))
+		hash := hmac.New(sha256.New, []byte(secretKey))
 		hash.Write([]byte(stringToSign))
 		encodedSignature := base64.StdEncoding.EncodeToString(hash.Sum(nil))
 		if input.Signature != encodedSignature {
@@ -115,7 +111,7 @@ func parseHeader(header string) (*authorizationHeader, error) {
 				input.TimestampString = currentPart[1]
 			}
 		default:
-			return nil, fmt.Errorf("%s", "request header contains invalid parameter.")
+			return nil, fmt.Errorf("request header contains invalid parameter [%s]", currentPart[0])
 		}
 
 	}
