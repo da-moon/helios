@@ -15,13 +15,13 @@ import (
 // Configuration :
 type Configuration struct {
 	RequestHeaders          []string
-	Secret                  func(string) string
+	Secret                  func(string) []byte
 	ExpirationTime          time.Duration
 	ExpirationTimeTolerance time.Duration
 }
 
 // NewConfiguration :
-func NewConfiguration(_requestHeaders []string, _secret func(string) string, _expirationTime time.Duration, _expirationTimeTolerance time.Duration) *Configuration {
+func NewConfiguration(_requestHeaders []string, _secret func(string) []byte, _expirationTime time.Duration, _expirationTimeTolerance time.Duration) *Configuration {
 	return &Configuration{
 		RequestHeaders:          _requestHeaders,
 		Secret:                  _secret,
@@ -32,7 +32,7 @@ func NewConfiguration(_requestHeaders []string, _secret func(string) string, _ex
 
 //
 type authorizationHeader struct {
-	Key             string
+	AccessKey       string
 	Signature       string
 	TimestampString string
 	Timestamp       time.Time
@@ -66,11 +66,11 @@ func AuthorisationHandler(configuration *Configuration) func(http.ResponseWriter
 		if err != nil {
 			log.Panic(err)
 		}
-		secret := configuration.Secret(input.Key)
-		if len(secret) == 0 {
+		secretKey := configuration.Secret(input.AccessKey)
+		if len(secretKey) == 0 {
 			log.Panicf("Request API key is invalid")
 		}
-		hash := hmac.New(sha256.New, []byte(secret))
+		hash := hmac.New(sha256.New, (secretKey))
 		hash.Write([]byte(stringToSign))
 		encodedSignature := base64.StdEncoding.EncodeToString(hash.Sum(nil))
 		if input.Signature != encodedSignature {
@@ -88,12 +88,12 @@ func parseHeader(header string) (*authorizationHeader, error) {
 	for _, part := range parts {
 		currentPart := strings.SplitN(strings.Trim(part, " "), "=", 2)
 		switch currentPart[0] {
-		case "Key":
+		case "AccessKey":
 			{
-				if len(input.Key) > 0 {
+				if len(input.AccessKey) > 0 {
 					return nil, fmt.Errorf("Parameter [%s] is repeated in request header", currentPart[0])
 				}
-				input.Key = currentPart[1]
+				input.AccessKey = currentPart[1]
 			}
 		case "Signature":
 			{
@@ -119,7 +119,7 @@ func parseHeader(header string) (*authorizationHeader, error) {
 		}
 
 	}
-	if len(input.Key) == 0 && len(input.Signature) == 0 && input.Timestamp.IsZero() {
+	if len(input.AccessKey) == 0 && len(input.Signature) == 0 && input.Timestamp.IsZero() {
 		return nil, fmt.Errorf("%s", "request header missing parameter.")
 	}
 	return input, nil
